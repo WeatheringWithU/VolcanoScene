@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>111</title>
+        <title>Volcano Scene</title>
 
     </head>
     <body>
@@ -28,13 +28,13 @@
         <script id="fragmentShader" type="x-shader/x-fragment">
 
 			uniform float time;
-
+            uniform float speed;
 			uniform float fogDensity;
 			uniform vec3 fogColor;
 
 			uniform sampler2D texture1;
 			uniform sampler2D texture2;
-
+            
 			varying vec2 vUv;
 
 			void main( void ) {
@@ -45,7 +45,7 @@
 				// vec2 T1 = vUv + vec2( 1.5, - 1.5 ) * time * 0.02;
 				// vec2 T2 = vUv + vec2( - 0.5, 2.0 ) * time * 0.01;
 
-				vec2 T1 = vUv + vec2( 1.5, - 1.5 ) * time * (-0.10);
+				vec2 T1 = vUv + vec2( 1.5, - 1.5 ) * time * (-speed / 10.0);
 				vec2 T2 = vUv + vec2( - 0.5, 2.0 ) * time * (0.01);
 
 
@@ -98,12 +98,13 @@
             var objLoader1, objLoader2, gltfloader, txtloader1, txtloader2, txtloader3;
             var dirLight, pointLight, ambientLight, gridhelper;
             var engine1, engine2;
-            var uniforms;
-            var radius, angle;
+            var uniforms, radius, angle;
             var volcano = [];
             var clock = new THREE.Clock();
             var raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
-            var rotateflag = true;
+            var rotate_value = 1, rotateflag = true;
+            var BloomValue = 0.30, lavaspeed = 1.0;
+            var lavageo, lavamesh, lavamaterial;
 
             txtloader1 = new THREE.TextureLoader();
             const starTex = txtloader1.load('images/fire.jpg');
@@ -122,12 +123,17 @@
                 positionBase: new THREE.Vector3(0, 25, 1.5),
                 positionSpread: new THREE.Vector3(3, 0, 3),
                 positionStyle: 1,
-                sizeChange: new Change([0, 1], [20, 10]),
+                sizeChange: new Change([0, 1], [40, 10]),
                 velocityBase: new THREE.Vector3(0, 30, 0),
-                velocitySpread: new THREE.Vector3(50, 10, 50),
+                velocitySpread: new THREE.Vector3(50, 15, 50),
                 velocityStyle: 1
             }
-
+            var EmitSpeed1 = 30;
+            var SpreadSpeed1 = 50;
+            var EmitSize11 = 40;
+            var EmitSize12 = 10;
+            var ParticleDensity1 = 30;
+            
             var txtloader2 = new THREE.TextureLoader();
             const smokeTex = txtloader2.load('images/smokeparticle.png');
             var smoke = {
@@ -147,10 +153,15 @@
                 positionStyle: 1,
                 sizeChange: new Change([0, 1], [12, 20]),
                 velocityBase: new THREE.Vector3(0, 30, 0),
-                velocitySpread: new THREE.Vector3(15, 10, 15),
+                velocitySpread: new THREE.Vector3(15, 15, 15),
                 velocityStyle: 1
             }
-            
+            var EmitSpeed2 = 30;
+            var SpreadSpeed2 = 15;
+            var EmitSize21 = 12;
+            var EmitSize22 = 20;
+            var ParticleDensity2 = 100;
+
             init();
             animate();
 
@@ -168,9 +179,6 @@
                 pointLight.position.set(0, 50, 0);
                 pointLight.castShadow = true;
                 scene.add(pointLight);
-
-                // dirLight = new THREE.DirectionalLight(0x909090, 1);
-                // scene.add(dirLight);
 
                 camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000)
                 radius = 60;
@@ -192,31 +200,22 @@
 
                 controls.staticMoving = false;
                 controls.dynamicDampingFactor = 0.3;
-                //        controls.autoRotate = true;
                 controls.keys = [65, 83, 68]; // [ rotateKey, zoomKey, panKey ]
                 controls.enabled = true;
 
-                // var axeshelper = new THREE.AxesHelper(50);
-                // scene.add(axeshelper);
-                
-                // gridhelper = new THREE.GridHelper(200, 100);
-                // scene.add(gridhelper);
-
-                const textureLoader = new THREE.TextureLoader();
+                const textureLoaderLava = new THREE.TextureLoader();
 				uniforms = {
-
-					"fogDensity": { value: 0.15 },
-					"fogColor": { value: new THREE.Vector3( 0, 0, 0 ) },
 					"time": { value: 1.0 },
+                    "speed": { value: 1.0},
 					"uvScale": { value: new THREE.Vector2( 3.0, 1.0 ) },
-					"texture1": { value: textureLoader.load( 'images/cloud.png' ) },
-					"texture2": { value: textureLoader.load( 'images/lava.jpg' ) }
+					"texture1": { value: textureLoaderLava.load( 'images/cloud.png' ) },
+					"texture2": { value: textureLoaderLava.load( 'images/lava.jpg' ) }
 				};
 
 				uniforms[ "texture1" ].value.wrapS = uniforms[ "texture1" ].value.wrapT = THREE.RepeatWrapping;
 				uniforms[ "texture2" ].value.wrapS = uniforms[ "texture2" ].value.wrapT = THREE.RepeatWrapping;
 
-				const material = new THREE.ShaderMaterial( {
+				lavamaterial = new THREE.ShaderMaterial( {
 					uniforms: uniforms,
 					vertexShader: document.getElementById( 'vertexShader' ).textContent,
 					fragmentShader: document.getElementById( 'fragmentShader' ).textContent
@@ -234,16 +233,15 @@
 
                 objloader1 = new THREE.OBJLoader();
 				objloader1.load( 'model/lavamesh2.obj', function ( object ) {
-					const newGeo = object.children[0].geometry;
-					const mesh = new THREE.Mesh( newGeo, material );
-					scene.add( mesh );
+					lavageo = object.children[0].geometry;
+					lavamesh = new THREE.Mesh( lavageo, lavamaterial );
+					scene.add( lavamesh );
 				} );
 
                 objloader2 = new THREE.OBJLoader();
 				objloader2.load( 'model/sphere.obj', function ( object ) {
-					// console.log(object.children[0].geometry);
 					const newGeo = object.children[0].geometry;
-					const mesh = new THREE.Mesh( newGeo, material );
+					const mesh = new THREE.Mesh( newGeo, lavamaterial );
 					scene.add( mesh );
 				} );
 
@@ -260,10 +258,10 @@
                 scene.background = bgTexture;
 
                 addStat();
-                //addGUI();
+                addGUI();
 
                 const renderModel = new RenderPass( scene, camera );
-				const effectBloom = new BloomPass( 1.30 );
+				const effectBloom = new BloomPass( 1.0 + BloomValue );
 				const effectFilm = new FilmPass( 0.05, 0.65, 2048, false );
 
 				composer = new EffectComposer( renderer );
@@ -287,12 +285,85 @@
             function addGUI(){
                 var gui = new dat.GUI({ width: 300 });//
                 gui.domElement.style = 'position:absolute;top:0px;right:0px';
-                gui.add(this, "ClearModel").name("Clear Model");
+                var f = gui.addFolder('Scene');
+                f.add(this, "RotateMode").name("Rotate Mode");
+                f.add(this, "BloomValue", 0.0, 1.0, 0.1).name("Bloom Value").onFinishChange(function(value){
+                    BloomValue = value;
+                    const renderModel = new RenderPass( scene, camera );
+                    const effectBloom = new BloomPass( 1.0 + BloomValue );
+                    const effectFilm = new FilmPass( 0.05, 0.65, 2048, false );
+                    composer = new EffectComposer( renderer );
+                    composer.addPass( renderModel );
+                    composer.addPass( effectBloom );
+                    composer.addPass( effectFilm );
+                });
+                f.add(this, "lavaspeed", 0.5, 3.0, 0.1).name("Lava Speed").onChange(function(value){
+                    lavamesh.material.uniforms.speed.value = value;
+                });
+                f.open();
+                var f1 = gui.addFolder('ParticleFireball');
+                f1.add(this, "EmitSpeed1", 20.0, 50.0, 1).name("Emit Speed").onFinishChange(function(value){
+                    fireball.velocityBase = new THREE.Vector3(0, value, 0);
+                    UpdateParticleFireball();
+                });
+                f1.add(this, "SpreadSpeed1", 30.0, 80.0, 1).name("Spread Speed").onFinishChange(function(value){
+                    fireball.velocitySpread = new THREE.Vector3(value, EmitSpeed1 / 2.0, value),
+                    UpdateParticleFireball();
+                });
+                f1.add(this, "EmitSize11", 5.0, 80.0, 1).name("Start Size").onFinishChange(function(value){
+                    fireball.sizeChange = new Change([0, 1], [value, EmitSize12]);
+                    UpdateParticleFireball();
+                });
+                f1.add(this, "EmitSize12", 5.0, 80.0, 1).name("End Size").onFinishChange(function(value){
+                    fireball.sizeChange = new Change([0, 1], [EmitSize11, value]);
+                    UpdateParticleFireball();
+                });
+                f1.add(this, "ParticleDensity1", 10.0, 100.0, 1).name("Particle Density").onFinishChange(function(value){
+                    fireball.particlesPerSecond = Math.round(value);
+                    UpdateParticleFireball();
+                });
+
+                f1.open();
+                var f2 = gui.addFolder('ParticleSmoke');
+                f2.add(this, "EmitSpeed2", 10.0, 50.0, 1).name("Emit Speed").onFinishChange(function(value){
+                    smoke.velocityBase = new THREE.Vector3(0, value, 0);
+                    UpdateParticleSmoke();
+                });
+                f2.add(this, "SpreadSpeed2", 10.0, 50.0, 1).name("Spread Speed").onFinishChange(function(value){
+                    smoke.velocitySpread = new THREE.Vector3(value, EmitSpeed1 / 2.0, value),
+                    UpdateParticleSmoke();
+                });
+                f2.add(this, "EmitSize21", 5.0, 80.0, 1).name("Start Size").onFinishChange(function(value){
+                    smoke.sizeChange = new Change([0, 1], [value, EmitSize22]);
+                    UpdateParticleSmoke();
+                });
+                f2.add(this, "EmitSize22", 5.0, 80.0, 1).name("End Size").onFinishChange(function(value){
+                    smoke.sizeChange = new Change([0, 1], [EmitSize21, value]);
+                    UpdateParticleSmoke();
+                });
+                f2.add(this, "ParticleDensity2", 50.0, 200.0, 1).name("Particle Density").onFinishChange(function(value){
+                    smoke.particlesPerSecond = Math.round(value);
+                    UpdateParticleSmoke();
+                });
+                f2.open();
             }
 
-            function ClearModel(){
-                scene.remove(volcano[4]);
+            function RotateMode(){
+                rotateflag = !rotateflag;
+            }
 
+            function UpdateParticleFireball(){
+                engine1.destroy();
+                engine1 = new ParticleFireball();
+                engine1.setValues( fireball );
+                engine1.initialize();
+            }
+
+            function UpdateParticleSmoke(){
+                engine2.destroy();
+                engine2 = new ParticleSmoke();
+                engine2.setValues( smoke );
+                engine2.initialize();
             }
 
             function onWindowResize() {
@@ -307,7 +378,6 @@
             }
 
             function render() {
-
                 var dt = clock.getDelta();
 	            engine1.update( dt * 0.5 );	
                 engine2.update( dt * 0.5 );	
@@ -315,14 +385,13 @@
                 renderer.clear();
                 composer.render( 0.01 );
             }
-            function animate() {
 
+            function animate() {
                 requestAnimationFrame( animate );
                 if (rotateflag){
                     angle += 0.005;
                     camera.position.set(radius * Math.sin(angle), 40, radius * Math.cos(angle));
                 }
-                
                 stats.update();
 				controls.update();
 				render();
