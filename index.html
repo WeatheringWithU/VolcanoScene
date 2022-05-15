@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>111</title>
+
+    </head>
+    <body>
+        <script src="js/three.js"></script>
+        <script src="js/OBJLoader.js"></script>
+        <script src="js/GLTFLoader.js"></script>
+        <script src="js/OrbitControls.js"></script>
+        <script src="js/Stats.js"></script>
+        <script src="js/dat.gui.js"></script>
+        <script src="js/ParticleFireball.js"></script>
+        <script src="js/ParticleSmoke.js"></script>
+
+        <script src="js/bloom/CopyShader.js"></script>
+        <script src="js/bloom/Pass.js"></script>
+        <script src="js/bloom/ShaderPass.js"></script>
+        <script src="js/bloom/MaskPass.js"></script>
+        <script src="js/bloom/FilmShader.js"></script>
+        <script src="js/bloom/ConvolutionShader.js"></script>
+        <script src="js/bloom/EffectComposer.js"></script>
+        <script src="js/bloom/RenderPass.js"></script>
+        <script src="js/bloom/FilmPass.js"></script>
+        <script src="js/bloom/BloomPass.js"></script>
+
+        <script id="fragmentShader" type="x-shader/x-fragment">
+
+			uniform float time;
+
+			uniform float fogDensity;
+			uniform vec3 fogColor;
+
+			uniform sampler2D texture1;
+			uniform sampler2D texture2;
+
+			varying vec2 vUv;
+
+			void main( void ) {
+
+				vec2 position = - 1.0 + 2.0 * vUv;
+
+				vec4 noise = texture2D( texture1, vUv );
+				// vec2 T1 = vUv + vec2( 1.5, - 1.5 ) * time * 0.02;
+				// vec2 T2 = vUv + vec2( - 0.5, 2.0 ) * time * 0.01;
+
+				vec2 T1 = vUv + vec2( 1.5, - 1.5 ) * time * (-0.10);
+				vec2 T2 = vUv + vec2( - 0.5, 2.0 ) * time * (0.01);
+
+
+				T1.x += noise.x * 0.0;
+				T1.y += noise.y * 10.0;
+				T2.x -= noise.y * 10.0;
+				T2.y += noise.z * 10.0;
+
+				float p = texture2D( texture1, T1 * 2.0 ).a;
+
+				vec4 color = texture2D( texture2, T2 * 2.0 );
+				vec4 temp = color * ( vec4( p, p, p, p ) * 2.0 ) + ( color * color - 0.1 );
+
+				if( temp.r > 1.0 ) { temp.bg += clamp( temp.r - 2.0, 0.0, 1.0 ); }
+				if( temp.g > 1.0 ) { temp.rb += temp.g - 1.0; }
+				if( temp.b > 1.0 ) { temp.rg += temp.b - 1.0; }
+
+				gl_FragColor = temp;
+
+				float depth = gl_FragCoord.z / gl_FragCoord.w;
+				const float LOG2 = 0.001442695;
+				float fogFactor = exp2( - fogDensity * fogDensity * depth * depth * LOG2 );
+				fogFactor = 1.0 - clamp( fogFactor, 0.0, 1.0 );
+
+				gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor );
+
+			}
+
+		</script>
+
+		<script id="vertexShader" type="x-shader/x-vertex">
+
+			uniform vec2 uvScale;
+			varying vec2 vUv;
+
+			void main()
+			{
+
+				vUv = uvScale * uv;
+				vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+				gl_Position = projectionMatrix * mvPosition;
+
+			}
+
+		</script>
+
+        <script >
+
+            var scene, camera, renderer, container, controls, stats, composer;
+            var objLoader1, objLoader2, gltfloader, txtloader1, txtloader2, txtloader3;
+            var dirLight, pointLight, ambientLight, gridhelper;
+            var engine1, engine2;
+            var uniforms;
+            var radius, angle;
+            var volcano = [];
+            var clock = new THREE.Clock();
+            var raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
+            var rotateflag = true;
+
+            txtloader1 = new THREE.TextureLoader();
+            const starTex = txtloader1.load('images/fire.jpg');
+            var fireball = {
+                accelerationBase: new THREE.Vector3(0, -50, 0),
+                angleBase: 0,
+                angleSpread: 180,
+                angleVelocityBase: 0,
+                angleVelocitySpread: 1440,
+                colorChange: new Change([0.4, 1.0], [new THREE.Vector3(0.9, 0.8, 0.4), new THREE.Vector3(0.9, 0.8, 0.6)]),
+                emitterDeathAge: 60,
+                opacityChange: new Change([2, 3], [0, 0]),
+                particleDeathAge: 1.5,
+                particleTexture: starTex,
+                particlesPerSecond: 30,
+                positionBase: new THREE.Vector3(0, 25, 1.5),
+                positionSpread: new THREE.Vector3(3, 0, 3),
+                positionStyle: 1,
+                sizeChange: new Change([0, 1], [20, 10]),
+                velocityBase: new THREE.Vector3(0, 30, 0),
+                velocitySpread: new THREE.Vector3(50, 10, 50),
+                velocityStyle: 1
+            }
+
+            var txtloader2 = new THREE.TextureLoader();
+            const smokeTex = txtloader2.load('images/smokeparticle.png');
+            var smoke = {
+                accelerationBase: new THREE.Vector3(0, -10, 0),
+                angleBase: 0,
+                angleSpread: 720,
+                angleVelocityBase: 0,
+                angleVelocitySpread: 720,
+                colorChange: new Change([0.6, 1], [new THREE.Vector3(0.8, 0.1, 0.1), new THREE.Vector3(0.8, 0.8, 0.8)]),
+                emitterDeathAge: 60,
+                opacityChange: new Change([0.8, 2], [0.5, 0]),
+                particleDeathAge: 2,
+                particleTexture: smokeTex,
+                particlesPerSecond: 100,
+                positionBase: new THREE.Vector3(0, 28, 1.5),
+                positionSpread: new THREE.Vector3(3, 0, 3),
+                positionStyle: 1,
+                sizeChange: new Change([0, 1], [12, 20]),
+                velocityBase: new THREE.Vector3(0, 30, 0),
+                velocitySpread: new THREE.Vector3(15, 10, 15),
+                velocityStyle: 1
+            }
+            
+            init();
+            animate();
+
+            function init(){
+
+                container = document.createElement('div');
+                document.body.appendChild(container);
+            
+                scene = new THREE.Scene();
+
+                ambientLight = new THREE.AmbientLight(0x444444);//0x606060   0xd0d0d0
+                scene.add(ambientLight);
+
+                pointLight = new THREE.PointLight(0xffffff);//0x909090 0x404040
+                pointLight.position.set(0, 50, 0);
+                pointLight.castShadow = true;
+                scene.add(pointLight);
+
+                // dirLight = new THREE.DirectionalLight(0x909090, 1);
+                // scene.add(dirLight);
+
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000)
+                radius = 60;
+                angle = 0;
+                camera.position.set(radius * Math.sin(angle), 40, radius * Math.cos(angle));
+
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                container.appendChild(renderer.domElement);
+                renderer.autoClear = false;
+
+                document.body.appendChild(renderer.domElement);
+
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.rotateSpeed = 2.0;
+                controls.zoomSpeed = 0.5;
+                controls.panSpeed = 0.2;
+
+                controls.staticMoving = false;
+                controls.dynamicDampingFactor = 0.3;
+                //        controls.autoRotate = true;
+                controls.keys = [65, 83, 68]; // [ rotateKey, zoomKey, panKey ]
+                controls.enabled = true;
+
+                // var axeshelper = new THREE.AxesHelper(50);
+                // scene.add(axeshelper);
+                
+                // gridhelper = new THREE.GridHelper(200, 100);
+                // scene.add(gridhelper);
+
+                const textureLoader = new THREE.TextureLoader();
+				uniforms = {
+
+					"fogDensity": { value: 0.15 },
+					"fogColor": { value: new THREE.Vector3( 0, 0, 0 ) },
+					"time": { value: 1.0 },
+					"uvScale": { value: new THREE.Vector2( 3.0, 1.0 ) },
+					"texture1": { value: textureLoader.load( 'images/cloud.png' ) },
+					"texture2": { value: textureLoader.load( 'images/lava.jpg' ) }
+				};
+
+				uniforms[ "texture1" ].value.wrapS = uniforms[ "texture1" ].value.wrapT = THREE.RepeatWrapping;
+				uniforms[ "texture2" ].value.wrapS = uniforms[ "texture2" ].value.wrapT = THREE.RepeatWrapping;
+
+				const material = new THREE.ShaderMaterial( {
+					uniforms: uniforms,
+					vertexShader: document.getElementById( 'vertexShader' ).textContent,
+					fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+				} );
+                
+                gltfloader = new THREE.GLTFLoader();
+                gltfloader.load('/model/volcano1.glb', function(result){
+                    var len = result.scene.children.length
+                    for (var i = 0; i < len; i++){
+                        var object = result.scene.children[0];
+                        volcano.push(object);               
+                        scene.add(object);
+                    }
+                })
+
+                objloader1 = new THREE.OBJLoader();
+				objloader1.load( 'model/lavamesh2.obj', function ( object ) {
+					const newGeo = object.children[0].geometry;
+					const mesh = new THREE.Mesh( newGeo, material );
+					scene.add( mesh );
+				} );
+
+                objloader2 = new THREE.OBJLoader();
+				objloader2.load( 'model/sphere.obj', function ( object ) {
+					// console.log(object.children[0].geometry);
+					const newGeo = object.children[0].geometry;
+					const mesh = new THREE.Mesh( newGeo, material );
+					scene.add( mesh );
+				} );
+
+                engine2 = new ParticleSmoke();
+                engine2.setValues( smoke );
+                engine2.initialize();
+
+                engine1 = new ParticleFireball();
+                engine1.setValues( fireball );
+                engine1.initialize();
+
+                txtloader3 = new THREE.TextureLoader();
+                const bgTexture = txtloader3.load('images/sky_dark.png');
+                scene.background = bgTexture;
+
+                addStat();
+                //addGUI();
+
+                const renderModel = new RenderPass( scene, camera );
+				const effectBloom = new BloomPass( 1.30 );
+				const effectFilm = new FilmPass( 0.05, 0.65, 2048, false );
+
+				composer = new EffectComposer( renderer );
+				composer.addPass( renderModel );
+				composer.addPass( effectBloom );
+				composer.addPass( effectFilm );
+
+                document.addEventListener('mousemove', onDocumentMouseMove, false);
+                window.addEventListener('resize', onWindowResize, false);
+            }
+
+            function addStat() {
+                stats = new Stats();
+                stats.domElement.style.position = 'absolute';
+                stats.domElement.style.bottom = '15px';
+                stats.domElement.style.left = '15px';
+                stats.domElement.style.zIndex = 100;
+                container.appendChild(stats.domElement);
+            }
+
+            function addGUI(){
+                var gui = new dat.GUI({ width: 300 });//
+                gui.domElement.style = 'position:absolute;top:0px;right:0px';
+                gui.add(this, "ClearModel").name("Clear Model");
+            }
+
+            function ClearModel(){
+                scene.remove(volcano[4]);
+
+            }
+
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize( window.innerWidth, window.innerHeight );
+                composer.setSize( window.innerWidth, window.innerHeight );
+            }
+            
+            function onDocumentMouseMove(event) {
+
+            }
+
+            function render() {
+
+                var dt = clock.getDelta();
+	            engine1.update( dt * 0.5 );	
+                engine2.update( dt * 0.5 );	
+                uniforms[ 'time' ].value += 0.6 * dt;
+                renderer.clear();
+                composer.render( 0.01 );
+            }
+            function animate() {
+
+                requestAnimationFrame( animate );
+                if (rotateflag){
+                    angle += 0.005;
+                    camera.position.set(radius * Math.sin(angle), 40, radius * Math.cos(angle));
+                }
+                
+                stats.update();
+				controls.update();
+				render();
+            }
+
+        </script>
+
+
+    </body>
+</html>
