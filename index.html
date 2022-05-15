@@ -223,7 +223,7 @@
 				} );
                 
                 gltfloader = new THREE.GLTFLoader();
-                gltfloader.load('/model/volcano1.glb', function(result){
+                gltfloader.load('https://github.com/WeatheringWithU/VolcanoScene/tree/main/model/volcano1.glb', function(result){
                     var len = result.scene.children.length
                     for (var i = 0; i < len; i++){
                         var object = result.scene.children[0];
