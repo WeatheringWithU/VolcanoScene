@@ -300,9 +300,6 @@ ParticleSmoke.prototype.randomValue = function(base, spread)
 ParticleSmoke.prototype.randomVector3 = function(base, spread)
 {
 	var rand3 = new THREE.Vector3( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 );
-	// console.log(base);
-	// console.log(spread);
-	// console.log(rand3);
 	var tmp = new THREE.Vector3(spread.x * rand3.x, spread.y * rand3.y, spread.z * rand3.z );
 	// return new THREE.Vector3().addVectors( base, new THREE.Vector3().multiplyVectors( spread, rand3 ) );
 	return new THREE.Vector3(base.x + tmp.x, base.y + tmp.y, base.z + tmp.z);
@@ -392,7 +389,6 @@ ParticleSmoke.prototype.initialize = function()
 	this.particleMesh = new THREE.Points( this.particleGeometry, this.particleMaterial );
 	this.particleMesh.dynamic = true;
 	this.particleMesh.sortParticles = true;
-	console.log(this.particleMesh);
 	scene.add( this.particleMesh );
 }
 
